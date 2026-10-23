@@ -28,17 +28,39 @@ a.btn,button{display:inline-block;padding:12px 26px;border:0;border-radius:10px;
   <h1>لوحة ملاحظات السلامة</h1>
   <p id="msg">جاري فتح اللوحة…</p>
   <div class="sp" id="sp"></div>
-  <a class="btn" id="open" href="#">فتح اللوحة</a>
+  <button id="install" style="display:none;margin:0 6px 10px">تثبيت التطبيق</button>
+  <a class="btn" id="open" href="#" style="margin:0 6px 10px">فتح اللوحة</a>
+  <p id="hint" style="display:none;font-size:13px;margin-top:14px"></p>
 </div>
 <script>
 // رابط لوحة Apps Script (نشر الويب). غيّره هنا فقط عند تغيير النشر.
 var APP_URL = 'https://script.google.com/macros/s/AKfycbxuEEbPMyZJtqC-nVFii44_RjQb3OUck_zCAG9IgqjtGn1PvkNausc4YPSCyT0kQp0_bg/exec';
-document.getElementById('open').href = APP_URL;
+var $ = function (id) { return document.getElementById(id); };
+$('open').href = APP_URL;
 if ('serviceWorker' in navigator) { try { navigator.serviceWorker.register('sw.js'); } catch (e) {} }
-var manual = /[?&]manual=1/.test(location.search);
-if (!navigator.onLine) { location.replace('offline.html'); }
-else if (!manual) { setTimeout(function () { location.replace(APP_URL); }, 600); }
-else { document.getElementById('sp').style.display = 'none'; document.getElementById('msg').textContent = 'اضغط لفتح اللوحة'; }
+var standalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+var deferred = null;
+window.addEventListener('beforeinstallprompt', function (e) {
+  e.preventDefault(); deferred = e; $('install').style.display = 'inline-block';
+});
+$('install').onclick = function () {
+  if (!deferred) return; deferred.prompt();
+  deferred.userChoice.then(function () { deferred = null; $('install').style.display = 'none'; });
+};
+if (standalone) {
+  // مثبّت: افتح اللوحة مباشرة
+  if (!navigator.onLine) location.replace('offline.html');
+  else setTimeout(function () { location.replace(APP_URL); }, 400);
+} else {
+  // داخل المتصفح: ابقَ هنا ليظهر خيار التثبيت
+  $('sp').style.display = 'none';
+  $('msg').textContent = 'ثبّت التطبيق على جوالك ثم افتحه من الأيقونة';
+  var ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  $('hint').style.display = 'block';
+  $('hint').textContent = ios
+    ? 'آيفون: زر المشاركة ثم «إضافة إلى الشاشة الرئيسية»'
+    : 'إذا ما ظهر زر التثبيت: قائمة المتصفح (النقاط الثلاث) ثم «تثبيت التطبيق» أو «إضافة إلى الشاشة الرئيسية»';
+}
 </script>
 </body>
 </html>
