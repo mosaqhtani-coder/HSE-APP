@@ -3,6 +3,17 @@
 'use strict';
 var C = window.HSE_CONFIG, Core = window.Core, TZ = C.TZ_OFFSET_MIN;
 var root = document.getElementById('app');
+var IC = {
+  home: '<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>',
+  team: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18 14.5a6.5 6.5 0 0 1 3.5 5.5"/>',
+  feed: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3v2h6V3"/><path d="M9 12l2 2 4-4"/><path d="M9 17h6"/>',
+  zones: '<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
+  refresh: '<path d="M20 11a8 8 0 0 0-14.5-4.2L4 8.5"/><path d="M4 4v4.5h4.5"/><path d="M4 13a8 8 0 0 0 14.5 4.2l1.5-1.7"/><path d="M20 20v-4.5h-4.5"/>',
+  menu: '<circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
+  back: '<path d="M5 12h14"/><path d="M13 6l6 6-6 6"/>'
+};
+function ico(n) { return '<svg class="si" viewBox="0 0 24 24" aria-hidden="true">' + IC[n] + '</svg>'; }
 var MON = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 var DOW = ['أحد', 'إثن', 'ثلا', 'أرب', 'خمي', 'جمع', 'سبت'];
 var KIND = { act: 'تصرف غير آمن', condition: 'ظرف غير آمن', good: 'ممارسة جيدة', other: 'أخرى' };
@@ -26,7 +37,7 @@ function fmtTime(ts) { var d = loc(ts); return pad(d.getUTCHours()) + ':' + pad(
 function fmtKey(k) { var p = k.split('-'); return (+p[2]) + ' ' + MON[+p[1] - 1] + ' ' + p[0]; }
 function startOfDay(ts) { return Core.keyToUTC(Core.dayKey(ts, TZ)) - TZ * 60000; }
 function hue(s) { var h = 0; for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360; return h; }
-function av(p) { var h = hue(p.id); return '<div class="av" style="--c1:hsl(' + h + ' 75% 62%);--c2:hsl(' + ((h + 50) % 360) + ' 75% 58%)">' + esc((p.name.replace(/^ID /, '#').trim()[0]) || '؟') + '</div>'; }
+function av(p) { var h = hue(p.id); return '<div class="av" style="--c1:hsl(' + h + ' 52% 34%);--c2:hsl(' + ((h + 40) % 360) + ' 55% 24%)">' + esc((p.name.replace(/^ID /, '#').trim()[0]) || '؟') + '</div>'; }
 function hz(o) { var b = Core.splitBilingual(o.hazard); return b.ar || b.en || o.hazard || '—'; }
 function toast(m) { S.toast = m; render(); setTimeout(function () { S.toast = ''; render(); }, 2600); }
 
@@ -153,7 +164,7 @@ function topList(m, n) { return Object.keys(m).map(function (k) { return [k, m[k
 function chips() { return '<div class="chips">' + PERIODS.map(function (p) { return '<button class="chip' + (S.period === p[0] ? ' on' : '') + '" data-act="period" data-v="' + p[0] + '">' + p[1] + '</button>'; }).join('') + '</div>'; }
 function topbar(title, sub) {
   return '<div class="top"><h1>' + esc(title) + (sub ? '<span class="sub">' + sub + '</span>' : '') + '</h1>' +
-    '<button class="ic' + (S.loading ? ' spin' : '') + '" data-act="refresh" aria-label="تحديث">⟳</button><button class="ic" data-act="menu" aria-label="القائمة">⋯</button></div>';
+    '<button class="ic' + (S.loading ? ' spin' : '') + '" data-act="refresh" aria-label="تحديث">' + ico('refresh') + '</button><button class="ic" data-act="menu" aria-label="القائمة">' + ico('menu') + '</button></div>';
 }
 function syncSub() { return '<span class="dot' + (S.offline ? ' off' : '') + '"></span>' + (S.offline ? 'بدون اتصال · ' : '') + (S.syncedAt ? 'آخر تحديث ' + fmtTime(S.syncedAt) + ' · ' + fmtDay(S.syncedAt) : 'لم يتم التحديث'); }
 function obsCard(o, showEmp) {
@@ -176,7 +187,7 @@ function vHome() {
   var mk = Core.dayKey(now, TZ).slice(0, 7);
   var mo = S.rows.filter(function (o) { return o.ts !== null && Core.monthKey(o.ts, TZ) === mk; }).length;
   var unsafe = t.act + t.condition, share = t.n ? unsafe / t.n : 0, R = 34, Cc = 2 * Math.PI * R;
-  var h = '<div class="hero"><svg class="ring" viewBox="0 0 84 84"><circle cx="42" cy="42" r="' + R + '" fill="none" stroke="#ffffff22" stroke-width="9"/><circle cx="42" cy="42" r="' + R + '" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" stroke-dasharray="' + (Cc * share).toFixed(1) + ' ' + Cc.toFixed(1) + '" transform="rotate(-90 42 42)"/><text x="42" y="47" text-anchor="middle" fill="#fff" font-size="15" font-weight="800">' + Math.round(share * 100) + '%</text></svg>' +
+  var h = '<div class="hero"><svg class="ring" viewBox="0 0 84 84"><circle cx="42" cy="42" r="' + R + '" fill="none" stroke="#ffffff22" stroke-width="9"/><circle cx="42" cy="42" r="' + R + '" fill="none" stroke="#F5B700" stroke-width="9" stroke-linecap="round" stroke-dasharray="' + (Cc * share).toFixed(1) + ' ' + Cc.toFixed(1) + '" transform="rotate(-90 42 42)"/><text x="42" y="47" text-anchor="middle" fill="#fff" font-size="15" font-weight="800">' + Math.round(share * 100) + '%</text></svg>' +
     '<div class="lbl" style="padding-inline-start:96px">إجمالي الملاحظات</div><div class="big num" data-n="' + t.n + '" style="padding-inline-start:96px">' + nf(t.n) + '</div>' +
     '<div class="row"><div><b class="num">' + nf(today) + '</b><span>اليوم</span></div><div><b class="num">' + nf(w7) + '</b><span>آخر ٧ أيام</span></div><div><b class="num">' + nf(mo) + '</b><span>هذا الشهر</span></div><div><b class="num">' + nf(Object.keys(countBy(rows, function (o) { return o.empId; })).length) + '</b><span>موظف نشط</span></div></div></div>';
   h += '<div class="kpis">' +
@@ -215,7 +226,7 @@ function teamRows() {
 }
 function vTeam() {
   return topbar('الموظفين', syncSub()) + chips() +
-    '<div class="search"><span>🔍</span><input id="tq" type="search" placeholder="ابحث بالاسم أو الرقم الوظيفي" value="' + esc(S.tq) + '" autocomplete="off"></div>' +
+    '<div class="search">' + ico('search') + '<input id="tq" type="search" placeholder="ابحث بالاسم أو الرقم الوظيفي" value="' + esc(S.tq) + '" autocomplete="off"></div>' +
     '<div class="filters"><button class="chip' + (S.showInactive ? ' on' : '') + '" data-act="inactive">' + (S.showInactive ? 'إخفاء من لا ملاحظات له' : 'إظهار من لا ملاحظات له') + '</button></div><div class="list" id="lst">' + teamRows() + '</div>';
 }
 function feedRows() {
@@ -232,7 +243,7 @@ function vFeed() {
   var zones = Object.keys(countBy(S.rows, function (o) { return o.zone; })).sort();
   function sel(id, cur, opts) { return '<select class="sel" id="' + id + '">' + opts.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (o[0] === cur ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select>'; }
   return topbar('الملاحظات', syncSub()) + chips() +
-    '<div class="search"><span>🔍</span><input id="fq" type="search" placeholder="بحث: رقم السجل / وصف / موظف / منطقة" value="' + esc(S.f.q) + '" autocomplete="off"></div>' +
+    '<div class="search">' + ico('search') + '<input id="fq" type="search" placeholder="بحث: رقم السجل / وصف / موظف / منطقة" value="' + esc(S.f.q) + '" autocomplete="off"></div>' +
     '<div class="filters">' + sel('fz', S.f.zone, [['', 'كل المناطق']].concat(zones.map(function (z) { return [z, z]; }))) + sel('fk', S.f.kind, [['', 'كل الأنواع'], ['act', KIND.act], ['condition', KIND.condition], ['good', KIND.good]]) + sel('fr', S.f.risk, [['', 'كل الخطورة'], ['high', 'عالية'], ['medium', 'متوسطة'], ['low', 'منخفضة']]) + '</div><div id="lst">' + feedRows() + '</div>';
 }
 function vZones() {
@@ -254,7 +265,7 @@ function vEmp() {
   var yRows = dated.filter(function (o) { return Core.dayKey(o.ts, TZ).slice(0, 4) === S.ey; });
   var days = {}; rows.forEach(function (o) { if (o.ts !== null) days[Core.dayKey(o.ts, TZ)] = 1; });
   var t = tally(rows), last = dated[0];
-  var h = '<div class="page"><div class="ph"><button class="ic back" data-act="back" aria-label="رجوع">→</button><div class="who">' + av(p) + '<div><h2>' + esc(p.name) + '</h2><div class="ids"><span class="num">' + esc(p.ids.join(' / ')) + '</span>' + (p.known ? '' : ' · غير موجود في الدليل') + '</div></div></div>' +
+  var h = '<div class="page"><div class="ph"><button class="ic back" data-act="back" aria-label="رجوع">' + ico('back') + '</button><div class="who">' + av(p) + '<div><h2>' + esc(p.name) + '</h2><div class="ids"><span class="num">' + esc(p.ids.join(' / ')) + '</span>' + (p.known ? '' : ' · غير موجود في الدليل') + '</div></div></div>' +
     '<div class="sts"><div><b class="num">' + nf(rows.length) + '</b><span>الإجمالي</span></div><div><b class="num">' + nf(yRows.length) + '</b><span>' + (S.ey || '—') + '</span></div><div><b class="num">' + nf(Object.keys(days).length) + '</b><span>أيام نشاط</span></div><div><b class="num">' + nf(t.high) + '</b><span>خطورة عالية</span></div></div></div>';
   if (!rows.length) return h + '<div class="empty">لا توجد ملاحظات لهذا الموظف</div></div>';
   h += '<div class="years">' + ys.map(function (y) { return '<button class="chip' + (S.ey === y ? ' on' : '') + '" data-act="ey" data-v="' + y + '">' + y + ' · ' + nf(years[y]) + '</button>'; }).join('') + '</div>';
@@ -331,7 +342,7 @@ function vLogin() {
     (S.error ? '<div class="err">' + esc(S.error) + '</div>' : '') + '<div class="note">قراءة فقط. لا يُكتب أي شيء في الشيت، ولا تُحفظ كلمة المرور.</div></div>';
 }
 function nav() {
-  var items = [['home', '◉', 'الرئيسية'], ['team', '👥', 'الموظفين'], ['feed', '☰', 'الملاحظات'], ['zones', '▦', 'المناطق']];
+  var items = [['home', ico('home'), 'الرئيسية'], ['team', ico('team'), 'الموظفين'], ['feed', ico('feed'), 'الملاحظات'], ['zones', ico('zones'), 'المناطق']];
   return '<div class="nav">' + items.map(function (i) { return '<button class="' + (S.view === i[0] ? 'on' : '') + '" data-act="nav" data-v="' + i[0] + '"><span class="i">' + i[1] + '</span>' + i[2] + '</button>'; }).join('') + '</div>';
 }
 
