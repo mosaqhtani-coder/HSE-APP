@@ -392,7 +392,31 @@ var Core = (function () {
     return lines.join('\r\n');
   }
 
+  /* ---------- التارقت: أيام العمل سبت-خميس والجمعة إجازة ---------- */
+  var DAILY_TARGET = 20;
+  function isWorkDay(k) { return new Date(keyToUTC(k)).getUTCDay() !== 5; }
+  function monthDays(ym) { var y = +ym.slice(0, 4), m = +ym.slice(5, 7); return new Date(Date.UTC(y, m, 0)).getUTCDate(); }
+  function workDaysInMonth(ym, upToKey) { // عدد أيام العمل في الشهر (حتى تاريخ اختياري ضمنه)
+    var n = 0, dim = monthDays(ym);
+    for (var d = 1; d <= dim; d++) { var k = ym + '-' + pad(d); if (upToKey && k > upToKey) break; if (isWorkDay(k)) n++; }
+    return n;
+  }
+  function targetInfo(done, ym, todayKey, daily) {
+    daily = daily || DAILY_TARGET;
+    var wd = workDaysInMonth(ym), cur = todayKey ? todayKey.slice(0, 7) : '';
+    var el = !todayKey || ym < cur ? wd : ym > cur ? 0 : workDaysInMonth(ym, todayKey);
+    var target = wd * daily, expected = el * daily;
+    return { daily: daily, workDays: wd, elapsed: el, remainingDays: wd - el, target: target, done: done, remaining: Math.max(0, target - done), over: Math.max(0, done - target),
+      expected: expected, diff: done - expected, pct: target ? Math.round(done / target * 100) : 0 };
+  }
+  function dayBreakdown(rows, key, tzMin) { // عدد ملاحظات كل موظف في يوم معيّن
+    var by = {}, list = [];
+    for (var i = 0; i < rows.length; i++) { var o = rows[i]; if (o.ts !== null && dayKey(o.ts, tzMin) === key) { list.push(o); inc(by, o.empId || ''); } }
+    return { byEmp: by, rows: list };
+  }
+
   var api = {
+    isWorkDay: isWorkDay, workDaysInMonth: workDaysInMonth, targetInfo: targetInfo, dayBreakdown: dayBreakdown, DAILY_TARGET: DAILY_TARGET,
     parseTimestamp: parseTimestamp, dayKey: dayKey, weekKey: weekKey, monthKey: monthKey, addDays: addDays, keyToUTC: keyToUTC,
     parsePhotoIds: parsePhotoIds, splitBilingual: splitBilingual,
     resolveColumns: resolveColumns, findHeaderRow: findHeaderRow, normalize: normalize, parseDirectory: parseDirectory, applyAliases: applyAliases,

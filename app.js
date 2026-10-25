@@ -7,10 +7,12 @@ var IC = {
   home: '<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>',
   team: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18 14.5a6.5 6.5 0 0 1 3.5 5.5"/>',
   feed: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3v2h6V3"/><path d="M9 12l2 2 4-4"/><path d="M9 17h6"/>',
+  day: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M9 15l2 2 4-4"/>',
   zones: '<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
   refresh: '<path d="M20 11a8 8 0 0 0-14.5-4.2L4 8.5"/><path d="M4 4v4.5h4.5"/><path d="M4 13a8 8 0 0 0 14.5 4.2l1.5-1.7"/><path d="M20 20v-4.5h-4.5"/>',
   menu: '<circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
+  next: '<path d="M19 12H5"/><path d="M11 6l-6 6 6 6"/>',
   back: '<path d="M5 12h14"/><path d="M13 6l6 6-6 6"/>'
 };
 function ico(n) { return '<svg class="si" viewBox="0 0 24 24" aria-hidden="true">' + IC[n] + '</svg>'; }
@@ -21,7 +23,7 @@ var RISK = { high: 'عالية', medium: 'متوسطة', low: 'منخفضة', ot
 var PERIODS = [['all', 'الكل'], ['today', 'اليوم'], ['7', '٧ أيام'], ['30', '٣٠ يوم'], ['month', 'هذا الشهر']];
 var S = {
   rows: [], dir: {}, people: [], byId: {}, quality: null, dirInfo: null,
-  view: 'home', period: 'all', f: { q: '', zone: '', kind: '', risk: '' }, tq: '', shown: 40, showInactive: false,
+  view: 'home', day: null, dfilter: 'all', tsort: 'n', period: 'all', f: { q: '', zone: '', kind: '', risk: '' }, tq: '', shown: 40, showInactive: true,
   token: null, exp: 0, signed: false, loading: false, error: '', syncedAt: 0, offline: !navigator.onLine, dirErr: false,
   emp: null, ey: null, em: null, ed: null, sheet: null, menu: false, lb: null, toast: ''
 };
@@ -173,9 +175,25 @@ function obsCard(o, showEmp) {
     '<span class="tag t-' + (o.catKind || 'other') + '">' + KIND[o.catKind || 'other'] + '</span>' + (o.risk ? '<span class="tag r-' + o.risk + '">' + RISK[o.risk] + '</span>' : '') + '</span></div>' +
     '<div class="ti">' + esc(hz(o)) + '</div>' + (showEmp && p ? '<p>' + esc(p.name) + (o.zone ? ' · ' + esc(o.zone) : '') + '</p>' : (o.zone ? '<p>' + esc(o.zone) + '</p>' : '')) + (o.desc ? '<p>' + esc(o.desc) + '</p>' : '') + '</button>';
 }
-function peopleRows(arr, max) {
+/* ---------- التارقت اليومي والشهري (٢٠ ملاحظة في يوم العمل، سبت–خميس، الجمعة إجازة) ---------- */
+function todayKey() { return Core.dayKey(Date.now(), TZ); }
+function counts(p) {
+  if (p._c && p._cn === p.rows.length) return p._c;
+  var m = {}, d = {}; p.rows.forEach(function (o) { if (o.ts === null) return; var k = Core.dayKey(o.ts, TZ); d[k] = (d[k] || 0) + 1; var ym = k.slice(0, 7); m[ym] = (m[ym] || 0) + 1; });
+  p._cn = p.rows.length; return (p._c = { m: m, d: d });
+}
+function tinfo(p, ym) { return Core.targetInfo(counts(p).m[ym] || 0, ym, todayKey()); }
+function tclass(i) { return i.done >= i.target ? 'ok' : i.diff >= 0 ? 'ahead' : i.diff > -i.daily ? 'near' : 'behind'; }
+function monthLabel(ym) { return MON[+ym.slice(5) - 1] + ' ' + ym.slice(0, 4); }
+function targetLine(p) {
+  var ym = todayKey().slice(0, 7), i = tinfo(p, ym), td = counts(p).d[todayKey()] || 0;
+  return '<div class="tg ' + tclass(i) + '"><span>' + MON[+ym.slice(5) - 1] + ': <b class="num">' + nf(i.done) + '</b> / <span class="num">' + nf(i.target) + '</span></span><span class="rem">' + (i.remaining ? 'باقي <b class="num">' + nf(i.remaining) + '</b>' : 'اكتمل التارقت ✓') + '</span></div>' +
+    '<div class="meter tgm ' + tclass(i) + '"><i style="width:' + Math.min(100, Math.max(2, i.pct)) + '%"></i></div>' +
+    (Core.isWorkDay(todayKey()) ? '<small class="mut">اليوم <b class="num">' + td + '</b> / <span class="num">' + i.daily + '</span></small>' : '<small class="mut">اليوم إجازة</small>');
+}
+function peopleRows(arr, max, tg) {
   return arr.map(function (x, i) {
-    var p = x.p; return '<button class="row2" data-act="emp" data-id="' + esc(p.id) + '"><span class="rk">' + (i + 1) + '</span>' + av(p) + '<div class="rw"><b>' + esc(p.name) + (p.known ? '' : ' *') + '</b><small class="num">' + esc(p.ids.join(' / ')) + '</small><div class="meter"><i style="width:' + Math.max(3, Math.round(x.n / max * 100)) + '%"></i></div></div><div class="tot num" data-n="' + x.n + '">' + nf(x.n) + '</div></button>';
+    var p = x.p; return '<button class="row2" data-act="emp" data-id="' + esc(p.id) + '"><span class="rk">' + (i + 1) + '</span>' + av(p) + '<div class="rw"><b>' + esc(p.name) + (p.known ? '' : ' *') + '</b><small class="num">' + esc(p.ids.join(' / ')) + '</small>' + (tg ? targetLine(p) : '<div class="meter"><i style="width:' + Math.max(3, Math.round(x.n / max * 100)) + '%"></i></div>') + '</div><div class="tot num" data-n="' + x.n + '">' + nf(x.n) + '</div></button>';
   }).join('');
 }
 
@@ -221,13 +239,41 @@ function teamRows() {
   var q = S.tq.trim().toLowerCase(), f = periodFrom();
   var arr = S.people.map(function (p) { var n = f === null ? p.rows.length : p.rows.filter(function (o) { return o.ts !== null && o.ts >= f; }).length; return { p: p, n: n }; })
     .filter(function (x) { return (S.showInactive || x.n > 0) && (!q || (x.p.name + ' ' + x.p.ids.join(' ')).toLowerCase().indexOf(q) >= 0); })
-    .sort(function (a, b) { return b.n - a.n || a.p.name.localeCompare(b.p.name, 'ar'); });
-  return arr.length ? peopleRows(arr, Math.max(1, arr[0].n)) : '<div class="empty">لا يوجد موظفين مطابقين</div>';
+    .sort(function (a, b) { if (S.tsort === 'rem') { var ym = todayKey().slice(0, 7); return tinfo(b.p, ym).remaining - tinfo(a.p, ym).remaining || a.p.name.localeCompare(b.p.name, 'ar'); } return b.n - a.n || a.p.name.localeCompare(b.p.name, 'ar'); });
+  return arr.length ? peopleRows(arr, Math.max(1, arr[0].n), true) : '<div class="empty">لا يوجد موظفين مطابقين</div>';
 }
 function vTeam() {
   return topbar('الموظفين', syncSub()) + chips() +
     '<div class="search">' + ico('search') + '<input id="tq" type="search" placeholder="ابحث بالاسم أو الرقم الوظيفي" value="' + esc(S.tq) + '" autocomplete="off"></div>' +
-    '<div class="filters"><button class="chip' + (S.showInactive ? ' on' : '') + '" data-act="inactive">' + (S.showInactive ? 'إخفاء من لا ملاحظات له' : 'إظهار من لا ملاحظات له') + '</button></div><div class="list" id="lst">' + teamRows() + '</div>';
+    '<div class="filters"><button class="chip' + (S.tsort === 'rem' ? ' on' : '') + '" data-act="tsort">الأكثر متبقي على التارقت</button><button class="chip' + (S.showInactive ? ' on' : '') + '" data-act="inactive">' + (S.showInactive ? 'إخفاء من لا ملاحظات له' : 'إظهار الجميع') + '</button></div><div class="list" id="lst">' + teamRows() + '</div>';
+}
+
+/* ---------- صفحة اليوم ---------- */
+var DOWF = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+function dkey() { return S.day || todayKey(); }
+function dowName(k) { return DOWF[new Date(Core.keyToUTC(k)).getUTCDay()]; }
+function vDay() {
+  var k = dkey(), tk = todayKey(), work = Core.isWorkDay(k), D = Core.DAILY_TARGET;
+  var br = Core.dayBreakdown(S.rows, k, TZ), list = [];
+  S.people.forEach(function (p) { var n = br.byEmp[p.id === '—' ? ''  : p.id] || 0; if (p.known || n > 0) list.push({ p: p, n: n }); });
+  var total = br.rows.length, active = list.filter(function (x) { return x.n > 0; }).length, done = list.filter(function (x) { return x.n >= D; }).length, zero = list.filter(function (x) { return x.n === 0; }).length, low = list.filter(function (x) { return x.n > 0 && x.n < D; }).length;
+  var f = S.dfilter;
+  var shown = list.filter(function (x) { return f === 'all' || (f === 'done' && x.n >= D) || (f === 'low' && x.n > 0 && x.n < D) || (f === 'zero' && x.n === 0); }).sort(function (a, b) { return a.n - b.n || a.p.name.localeCompare(b.p.name, 'ar'); });
+  if (f === 'all' || f === 'done') shown.reverse();
+  var h = topbar('ملاحظات اليوم', syncSub()) +
+    '<div class="daynav"><button class="ic dn" data-act="dday" data-v="1" aria-label="اليوم السابق">' + ico('back') + '</button><div class="dl"><b>' + dowName(k) + '</b><span class="num">' + fmtKey(k) + '</span>' + (k === tk ? '<em>اليوم</em>' : '') + '</div><button class="ic dn" data-act="dday" data-v="-1" aria-label="اليوم التالي"' + (k >= tk ? ' disabled' : '') + '>' + ico('next') + '</button></div>' +
+    '<div class="daytools"><input type="date" id="dpick" value="' + k + '" max="' + tk + '"><button class="chip" data-act="dtoday">اليوم</button></div>' +
+    (work ? '' : '<div class="offday">الجمعة إجازة — ما فيه تارقت يومي</div>') +
+    '<div class="kpis"><div class="kpi" style="--c:var(--primary)"><div class="v num">' + nf(total) + '</div><div class="l">ملاحظات اليوم</div></div><div class="kpi" style="--c:var(--mid)"><div class="v num">' + nf(active) + '</div><div class="l">موظف رفع ملاحظات</div></div>' +
+    (work ? '<div class="kpi" style="--c:var(--good)"><div class="v num">' + nf(done) + '</div><div class="l">حقق ' + D + ' فأكثر</div></div><div class="kpi" style="--c:var(--bad)"><div class="v num">' + nf(zero) + '</div><div class="l">ما رفع شي</div></div>' : '') + '</div>' +
+    '<div class="chips" style="padding-top:2px">' + [['all', 'الكل (' + list.length + ')'], ['low', 'ناقص (' + low + ')'], ['done', 'مكتمل (' + done + ')'], ['zero', 'ما رفع (' + zero + ')']].map(function (c) { return '<button class="chip' + (f === c[0] ? ' on' : '') + '" data-act="dfilter" data-v="' + c[0] + '">' + c[1] + '</button>'; }).join('') + '</div>' +
+    '<div class="list">' + (shown.length ? shown.map(function (x) {
+      var p = x.p, pct = Math.min(100, Math.round(x.n / D * 100)), st = x.n >= D ? 'ok' : x.n > 0 ? 'near' : (work ? 'behind' : 'off');
+      return '<button class="row2" data-act="empday" data-id="' + esc(p.id) + '" data-v="' + k + '">' + av(p) + '<div class="rw"><b>' + esc(p.name) + '</b><small class="num">' + esc(p.ids.join(' / ')) + '</small><div class="meter tgm ' + st + '"><i style="width:' + (x.n ? Math.max(4, pct) : 0) + '%"></i></div></div><div class="dcnt ' + st + '"><b class="num">' + x.n + '</b><span>من <span class="num">' + D + '</span></span></div></button>';
+    }).join('') : '<div class="empty">لا يوجد موظفين في هذا التصنيف</div>') + '</div>' +
+    '<div class="sec">ملاحظات ' + fmtKey(k) + ' (' + nf(total) + ')</div><div class="list">' + (total ? br.rows.sort(function (a, b) { return b.ts - a.ts; }).slice(0, S.shown).map(function (o) { return obsCard(o, true); }).join('') : '<div class="empty">لا توجد ملاحظات في هذا اليوم</div>') + '</div>' +
+    (total > S.shown ? '<button class="btn ghost more" data-act="more">عرض المزيد</button>' : '');
+  return h;
 }
 function feedRows() {
   var rows = inPeriod(S.rows), q = S.f.q.trim().toLowerCase();
@@ -267,6 +313,16 @@ function vEmp() {
   var t = tally(rows), last = dated[0];
   var h = '<div class="page"><div class="ph"><button class="ic back" data-act="back" aria-label="رجوع">' + ico('back') + '</button><div class="who">' + av(p) + '<div><h2>' + esc(p.name) + '</h2><div class="ids"><span class="num">' + esc(p.ids.join(' / ')) + '</span>' + (p.known ? '' : ' · غير موجود في الدليل') + '</div></div></div>' +
     '<div class="sts"><div><b class="num">' + nf(rows.length) + '</b><span>الإجمالي</span></div><div><b class="num">' + nf(yRows.length) + '</b><span>' + (S.ey || '—') + '</span></div><div><b class="num">' + nf(Object.keys(days).length) + '</b><span>أيام نشاط</span></div><div><b class="num">' + nf(t.high) + '</b><span>خطورة عالية</span></div></div></div>';
+
+  var tym = S.em ? S.ey + '-' + pad(S.em) : todayKey().slice(0, 7), ti = tinfo(p, tym), tdn = counts(p).d[todayKey()] || 0, isCur = tym === todayKey().slice(0, 7);
+  var need = ti.remaining ? (ti.remainingDays > 0 ? Math.ceil(ti.remaining / ti.remainingDays) : ti.remaining) : 0;
+  h += '<div class="wrap" style="margin-top:14px"><div class="card tgc ' + tclass(ti) + '"><h3>التارقت الشهري <small>' + monthLabel(tym) + '</small></h3>' +
+    '<div class="tgbig"><div><span class="num big">' + nf(ti.remaining) + '</span><div class="mut">' + (ti.remaining ? 'ملاحظة باقية على التارقت' : (ti.over ? 'اكتمل التارقت وزيادة ' + nf(ti.over) : 'اكتمل التارقت')) + '</div></div><div class="pc num">' + ti.pct + '%</div></div>' +
+    '<div class="meter tgm ' + tclass(ti) + '"><i style="width:' + Math.min(100, Math.max(2, ti.pct)) + '%"></i></div>' +
+    '<div class="kvg"><div><b class="num">' + nf(ti.done) + '</b><span>المنجز</span></div><div><b class="num">' + nf(ti.target) + '</b><span>تارقت الشهر</span></div><div><b class="num">' + ti.workDays + '</b><span>أيام العمل</span></div>' +
+    (isCur ? '<div><b class="num">' + nf(ti.expected) + '</b><span>المفروض لليوم</span></div><div><b class="num ' + (ti.diff >= 0 ? 'pos' : 'neg') + '">' + (ti.diff > 0 ? '+' : '') + nf(ti.diff) + '</b><span>' + (ti.diff >= 0 ? 'متقدم' : 'متأخر') + '</span></div><div><b class="num">' + tdn + ' / ' + ti.daily + '</b><span>اليوم</span></div>' : '<div><b class="num">' + nf(ti.expected) + '</b><span>المفروض</span></div><div><b class="num ' + (ti.diff >= 0 ? 'pos' : 'neg') + '">' + (ti.diff > 0 ? '+' : '') + nf(ti.diff) + '</b><span>' + (ti.diff >= 0 ? 'زيادة' : 'عجز') + '</span></div>') + '</div>' +
+    (isCur && ti.remaining && ti.remainingDays > 0 ? '<p class="mut" style="margin:10px 0 0;font-size:13px">يحتاج <b class="num">' + need + '</b> ملاحظة يوميًا في <b class="num">' + ti.remainingDays + '</b> يوم عمل متبقي (بدون اليوم).</p>' : '') +
+    '<p class="mut" style="margin:6px 0 0;font-size:12px">التارقت = ' + ti.daily + ' × أيام العمل (سبت–خميس). يتغيّر الشهر حسب الشهر المختار بالأسفل.</p></div></div>';
   if (!rows.length) return h + '<div class="empty">لا توجد ملاحظات لهذا الموظف</div></div>';
   h += '<div class="years">' + ys.map(function (y) { return '<button class="chip' + (S.ey === y ? ' on' : '') + '" data-act="ey" data-v="' + y + '">' + y + ' · ' + nf(years[y]) + '</button>'; }).join('') + '</div>';
   var mc = []; for (var i = 0; i < 12; i++) mc.push(0);
@@ -342,7 +398,7 @@ function vLogin() {
     (S.error ? '<div class="err">' + esc(S.error) + '</div>' : '') + '<div class="note">قراءة فقط. لا يُكتب أي شيء في الشيت، ولا تُحفظ كلمة المرور.</div></div>';
 }
 function nav() {
-  var items = [['home', ico('home'), 'الرئيسية'], ['team', ico('team'), 'الموظفين'], ['feed', ico('feed'), 'الملاحظات'], ['zones', ico('zones'), 'المناطق']];
+  var items = [['home', ico('home'), 'الرئيسية'], ['day', ico('day'), 'اليوم'], ['team', ico('team'), 'الموظفين'], ['feed', ico('feed'), 'الملاحظات'], ['zones', ico('zones'), 'المناطق']];
   return '<div class="nav">' + items.map(function (i) { return '<button class="' + (S.view === i[0] ? 'on' : '') + '" data-act="nav" data-v="' + i[0] + '"><span class="i">' + i[1] + '</span>' + i[2] + '</button>'; }).join('') + '</div>';
 }
 
@@ -354,7 +410,7 @@ function render() {
   else {
     h = (S.error ? '<div class="card" style="margin:12px 16px;border-color:var(--bad)"><b style="color:var(--bad)">' + esc(S.error) + '</b>' + (S.signed ? '' : '<br><button class="btn sm" style="margin-top:8px" data-act="signin">تسجيل الدخول</button>') + '</div>' : '');
     if (S.loading && !S.rows.length) h += '<div class="skel"></div><div class="skel"></div><div class="skel"></div>';
-    else h += S.view === 'home' ? vHome() : S.view === 'team' ? vTeam() : S.view === 'feed' ? vFeed() : vZones();
+    else h += S.view === 'home' ? vHome() : S.view === 'day' ? vDay() : S.view === 'team' ? vTeam() : S.view === 'feed' ? vFeed() : vZones();
     h += nav() + (S.emp ? vEmp() : '') + (S.sheet ? vSheet() : '') + (S.menu ? vMenu() : '');
   }
   if (S.lb) h += '<div class="lb" data-act="closelb"><img src="' + esc(S.lb) + '" alt=""></div>';
@@ -373,6 +429,7 @@ function animate() {
 }
 function bindInputs() {
   var t = document.getElementById('tq'); if (t) t.oninput = function () { S.tq = this.value; document.getElementById('lst').innerHTML = teamRows(); };
+  var dp = document.getElementById('dpick'); if (dp) dp.onchange = function () { if (this.value && this.value <= todayKey()) { S.day = this.value; S.shown = 40; render(); } };
   var f = document.getElementById('fq'); if (f) { var tm; f.oninput = function () { var v = this.value; clearTimeout(tm); tm = setTimeout(function () { S.f.q = v; S.shown = 40; document.getElementById('lst').innerHTML = feedRows(); }, 180); }; }
   [['fz', 'zone'], ['fk', 'kind'], ['fr', 'risk']].forEach(function (x) { var e = document.getElementById(x[0]); if (e) e.onchange = function () { S.f[x[1]] = this.value; S.shown = 40; render(); }; });
 }
@@ -389,6 +446,11 @@ root.addEventListener('click', function (e) {
   if (a === 'refresh') { S.menu = false; if (S.token && Date.now() < S.exp || S.signed) { getToken(false).catch(function () { return getToken(true); }).then(load).catch(function (er) { S.error = er.message; render(); }); } else signIn(); return; }
   if (a === 'nav') { S.view = v; S.shown = 40; render(); window.scrollTo(0, 0); return; }
   if (a === 'period') { S.period = v; S.shown = 40; render(); return; }
+  if (a === 'tsort') { S.tsort = S.tsort === 'rem' ? 'n' : 'rem'; render(); return; }
+  if (a === 'dday') { var d0 = Core.addDays(dkey(), -v); if (d0 <= todayKey()) { S.day = d0; S.shown = 40; render(); } return; }
+  if (a === 'dtoday') { S.day = null; S.shown = 40; render(); return; }
+  if (a === 'dfilter') { S.dfilter = v; render(); return; }
+  if (a === 'empday') { var id2 = el.dataset.id; if (!S.byId[id2]) return; push(); S.emp = id2; S.ey = v.slice(0, 4); S.em = +v.slice(5, 7); S.ed = counts(S.byId[id2]).d[v] ? v : null; render(); var pg2 = document.querySelector('.page'); if (pg2) pg2.scrollTop = 0; return; }
   if (a === 'inactive') { S.showInactive = !S.showInactive; render(); return; }
   if (a === 'more') { S.shown += 40; render(); return; }
   if (a === 'menu') { S.menu = true; push(); render(); return; }
