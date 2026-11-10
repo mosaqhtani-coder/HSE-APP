@@ -1,59 +1,11 @@
-// خدمة الكاش v1.16: نخزّن هيكل التطبيق فقط. طلبات الخادم (script.google.com) ما تمر من هنا أبداً.
-// الاستراتيجية: الملفات المرقّمة (?v=) من الكاش مباشرة (ثابتة لكل نسخة)، صفحة index.html من الشبكة بمهلة قصيرة
-// وبعدها الكاش، وباقي الملفات (أيقونات/manifest) من الكاش مع تحديث بالخلفية.
-var CACHE = 'ptw-app-v1.16';
-var VER = '?v=1.16';
-var SHELL = ['./', 'index.html', 'styles.css' + VER, 'app.js' + VER, 'config.js' + VER, 'manifest.webmanifest'];
-var NAV_TIMEOUT = 2500;
-
-self.addEventListener('install', function (e) {
-  e.waitUntil(caches.open(CACHE).then(function (c) {
-    return Promise.all(SHELL.map(function (u) { return c.add(new Request(u, { cache: 'reload' })).catch(function () {}); }));
-  }).then(function () { return self.skipWaiting(); }));
-});
-self.addEventListener('activate', function (e) {
-  e.waitUntil(caches.keys().then(function (ks) { return Promise.all(ks.filter(function (k) { return k !== CACHE; }).map(function (k) { return caches.delete(k); })); }).then(function () { return self.clients.claim(); }));
-});
-
-function put(req, res) {
-  if (res && res.ok && res.type !== 'opaque') { var copy = res.clone(); caches.open(CACHE).then(function (c) { c.put(req, copy); }); }
-  return res;
-}
-
-self.addEventListener('fetch', function (e) {
-  var req = e.request;
-  if (req.method !== 'GET') return;
-  var url = new URL(req.url);
-  if (url.origin !== self.location.origin) return;
-
-  // صفحة التطبيق: الشبكة أولًا بمهلة قصيرة، وإلا الكاش (فتح فوري حتى مع شبكة ضعيفة)
-  if (req.mode === 'navigate' || url.pathname.slice(-1) === '/' || /\/index\.html$/.test(url.pathname)) {
-    e.respondWith(new Promise(function (resolve) {
-      var done = false;
-      function fromCache() { return caches.match('index.html').then(function (m) { return m || caches.match('./'); }); }
-      var t = setTimeout(function () { fromCache().then(function (m) { if (m && !done) { done = true; resolve(m); } }); }, NAV_TIMEOUT);
-      fetch(new Request(req, { cache: 'no-cache' })).then(function (res) {
-        clearTimeout(t); put(new Request('index.html'), res.clone());
-        if (!done) { done = true; resolve(res); }
-      }).catch(function () {
-        clearTimeout(t);
-        fromCache().then(function (m) { if (!done) { done = true; resolve(m || Response.error()); } });
-      });
-    }));
-    return;
-  }
-
-  // ملفات مرقّمة بالنسخة: من الكاش مباشرة (الرقم يتغيّر مع كل إصدار فما فيه خطر قديم)
-  if (url.search.indexOf('v=') > -1) {
-    e.respondWith(caches.match(req).then(function (m) {
-      return m || fetch(req).then(function (res) { return put(req, res); });
-    }));
-    return;
-  }
-
-  // الباقي: من الكاش فورًا ونحدّثه بالخلفية
-  e.respondWith(caches.match(req).then(function (m) {
-    var net = fetch(new Request(req, { cache: 'no-cache' })).then(function (res) { return put(req, res); }).catch(function () { return m; });
-    return m || net;
-  }));
+// يخزّن غلاف التطبيق فقط (HTML/CSS/JS/أيقونات). لا يخزّن طلبات جوجل ولا البيانات.
+const CACHE = 'hse-app-v3';
+const SHELL = ['./', './index.html', './style.css', './fonts.css', './fonts/plex-arabic-400.woff2', './fonts/plex-arabic-600.woff2', './fonts/plex-arabic-700.woff2', './fonts/plex-latin-400.woff2', './fonts/plex-latin-600.woff2', './fonts/plex-latin-700.woff2', './icons/favicon.svg', './icons/favicon-32.png', './app.js', './core.js', './config.js', './offline.html', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/apple-touch-icon.png'];
+self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
+self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
+self.addEventListener('fetch', e => {
+  const req = e.request, url = new URL(req.url);
+  if (req.method !== 'GET' || url.origin !== location.origin) return;
+  e.respondWith(fetch(req).then(res => { const c = res.clone(); caches.open(CACHE).then(x => x.put(req, c)); return res; })
+    .catch(() => caches.match(req).then(r => r || (req.mode === 'navigate' ? caches.match('./index.html') : Response.error()))));
 });
